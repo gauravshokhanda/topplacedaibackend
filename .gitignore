@@ -1,0 +1,16 @@
+# Node modules
+node_modules/
+
+# Env files
+.env
+
+# Audio output
+public/output.mp3
+
+# Logs
+logs
+*.log
+
+# OS/system files
+.DS_Store
+Thumbs.db
