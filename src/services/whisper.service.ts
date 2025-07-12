@@ -1,46 +1,36 @@
-import fs from "fs";
 import axios from "axios";
 import FormData from "form-data";
+import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
-import ffmpegPath from '@ffmpeg-installer/ffmpeg';
-import ffmpeg from "fluent-ffmpeg";
 
 dotenv.config();
 
-// Set ffmpeg binary path
-ffmpeg.setFfmpegPath(ffmpegPath.path);
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const transcribeAudio = async (filePath: string): Promise<string> => {
-  const fixedPath = filePath.replace(/(\.\w+)?$/, "_fixed.mp3");
+  const form = new FormData();
+  form.append("file", fs.createReadStream(path.resolve(filePath)));
+  form.append("model", "whisper-1");
+  form.append("language", "en");
 
-  // Convert the audio to proper mp3 format
-  await new Promise((resolve, reject) => {
-    ffmpeg(filePath)
-      .audioCodec("libmp3lame")
-      .audioBitrate(128)
-      .audioFrequency(44100)
-      .toFormat("mp3")
-      .on("end", () => resolve(true))
-      .on("error", (err) => reject(err))
-      .save(fixedPath);
-  });
+  const headers = {
+    ...form.getHeaders(),
+    Authorization: `Bearer ${OPENAI_API_KEY}`,
+  };
 
-  const formData = new FormData();
-  formData.append("file", fs.createReadStream(fixedPath));
-  formData.append("model", "whisper-1");
+  try {
+    const response = await axios.post(
+      "https://api.openai.com/v1/audio/transcriptions",
+      form,
+      { headers }
+    );
 
-  const response = await axios.post("https://api.openai.com/v1/audio/transcriptions", formData, {
-    headers: {
-      ...formData.getHeaders(),
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-  });
-
-  // Clean up fixed file
-  fs.unlinkSync(fixedPath);
-
-  return response.data.text;
+    return response.data.text;
+  } catch (error: any) {
+    console.error("❌ Whisper transcription failed:", error?.response?.data || error);
+    return "Could not transcribe audio.";
+  }
 };
 
 export default transcribeAudio;

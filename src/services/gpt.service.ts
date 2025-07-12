@@ -1,34 +1,42 @@
-import axios from "axios";
-import dotenv from "dotenv";
+import OpenAI from "openai";
 
-dotenv.config();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
-const evaluateAnswer = async (transcript: string): Promise<string> => {
-  const response = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert technical interviewer. Evaluate the candidate’s answer for clarity, correctness, and depth.",
-        },
-        {
-          role: "user",
-          content: transcript,
-        },
-      ],
-      temperature: 0.7,
-    },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-    }
-  );
+export default async function evaluateAnswer(transcript: string) {
+  const prompt = `
+You are an AI interviewer assistant.
 
-  return response.data.choices[0].message.content;
-};
+Given the following candidate introduction:
+"${transcript}"
 
-export default evaluateAnswer;
+1. Extract the candidate's **name** (if any).
+2. Extract total **experience** (in years, if mentioned).
+3. Summarize their work background briefly.
+4. Then, evaluate their introduction in terms of:
+   - Clarity
+   - Correctness
+   - Depth
+
+Format your response like this JSON:
+
+{
+  "name": "Gaurav",
+  "experience": "4 years",
+  "summary": "Full-time developer at Leapfrog, worked on real estate and dashboard projects.",
+  "evaluation": "Your intro was clear and informative, though more specific details would help..."
+}
+`;
+
+  const chatResponse = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      { role: "system", content: "You are a helpful and precise AI evaluator." },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  const raw = chatResponse.choices[0]?.message?.content || "{}";
+  return JSON.parse(raw);
+}

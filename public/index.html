@@ -1,10 +1,140 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <title>AI Interviewer</title>
-</head>
-<body>
-    <h1>AI Interviewer</h1>
-    <p>Coming soon: Audio recording + interaction</p>
-</body>
+  <head>
+    <title>TopPlaced AI Interview (Voice)</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+      }
+      #chat {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-top: 20px;
+        height: 300px;
+        overflow-y: auto;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🎙️ AI Interview Chat (Voice)</h2>
+
+    <div id="setupForm">
+      <label><strong>Select Field:</strong></label
+      ><br />
+      <select id="field">
+        <option value="">-- Select Role --</option>
+        <option value="react developer">React Developer</option>
+        <option value="javascript developer">JavaScript Developer</option>
+        <option value="java developer">Java Developer</option>
+        <option value="frontend developer">Frontend Developer</option>
+        <option value="data analyst">Data Analyst</option>
+        <option value="business analyst">Business Analyst</option>
+      </select>
+      <br /><br />
+
+      <label><strong>Select Difficulty:</strong></label
+      ><br />
+      <select id="level">
+        <option value="">-- Select Level --</option>
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+        <option value="expert">Expert</option>
+      </select>
+      <br /><br />
+
+      <button onclick="startInterview()">🚀 Start Interview</button>
+    </div>
+
+    <div id="chatUI" class="hidden">
+      <button id="recordBtn">🎤 Start Recording</button>
+      <div id="chat"></div>
+    </div>
+
+    <script>
+      const socket = io("http://localhost:5000");
+      let mediaRecorder,
+        audioChunks = [];
+      let field = "",
+        level = "";
+
+      socket.on("connect", () => {
+        appendMessage("🟢 Connected to server");
+      });
+
+      socket.on("ai_message", async (msg) => {
+        if (msg.text) appendMessage("🤖 AI: " + msg.text);
+        if (msg.audio_base64) await playAudio(msg.audio_base64);
+      });
+
+      socket.on("ai_feedback", (data) => {
+        appendMessage("📄 Transcript: " + data.transcript);
+        appendMessage("🧠 Evaluation: " + data.evaluation);
+        if (data.scorecard) {
+          appendMessage("📊 Scorecard: " + JSON.stringify(data.scorecard));
+        }
+      });
+
+      function startInterview() {
+        field = document.getElementById("field").value;
+        level = document.getElementById("level").value;
+
+        if (!field || !level) {
+          alert("Please select both field and difficulty.");
+          return;
+        }
+
+        socket.emit("start_config", { field, level });
+        document.getElementById("setupForm").classList.add("hidden");
+        document.getElementById("chatUI").classList.remove("hidden");
+      }
+
+      document.getElementById("recordBtn").onclick = async () => {
+        if (mediaRecorder && mediaRecorder.state === "recording") {
+          mediaRecorder.stop();
+          document.getElementById("recordBtn").textContent =
+            "🎤 Start Recording";
+        } else {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            audioChunks = [];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const base64Audio = reader.result.split(",")[1];
+              socket.emit("audio_message", { audioBuffer: base64Audio });
+              appendMessage("📤 Sent your voice answer");
+            };
+            reader.readAsDataURL(audioBlob);
+          };
+          mediaRecorder.start();
+          document.getElementById("recordBtn").textContent = "⏹ Stop Recording";
+        }
+      };
+
+      function appendMessage(msg) {
+        const div = document.getElementById("chat");
+        div.innerHTML += `<p>${msg}</p>`;
+        div.scrollTop = div.scrollHeight;
+      }
+
+      async function playAudio(base64) {
+        try {
+          const audio = new Audio(base64); // base64 must start with: data:audio/mpeg;base64,...
+          await audio.play();
+        } catch (err) {
+          console.error("❌ Audio playback failed:", err);
+        }
+      }
+    </script>
+  </body>
 </html>
